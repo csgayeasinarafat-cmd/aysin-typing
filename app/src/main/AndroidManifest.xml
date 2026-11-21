@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <uses-permission android:name="android.permission.INTERNET"/>
+ <queries><intent><action android:name="android.intent.action.TTS_SERVICE"/></intent></queries>
  <application android:label="AySin Typing" android:allowBackup="false" android:theme="@android:style/Theme.Material.Light">
   <activity android:name=".WritingStudio" android:label="AySin Writing Studio" android:exported="true">
    <intent-filter><action android:name="android.intent.action.PROCESS_TEXT"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="text/plain"/></intent-filter>
