@@ -1,0 +1,2 @@
+# Contributing
+Fork the repository, create a topic branch and open a pull request. Describe the input field, Android version, expected behavior and actual result. Use synthetic text in examples. For a phonetic rule, include inputs and expected Bengali Unicode output in the test suite. For network changes, document the destination, consent screen and data sent. Run the Android workflow and attach its result before requesting review.
