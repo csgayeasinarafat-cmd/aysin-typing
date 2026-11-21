@@ -1,5 +1,13 @@
 name: Android
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    paths-ignore:
+      - '**.md'
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -25,11 +33,35 @@ jobs:
           name: AySin-Typing-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Retain test and lint reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: AySin-test-reports
+          path: |
+            app/build/test-results/testDebugUnitTest/*.xml
+            app/build/reports/lint-results-debug.html
       - name: Inspect packaged application and signature
         run: |
           "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | tee package.txt
           "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
           grep "package: name='org.aysin.typing'" package.txt
+      - name: Enable emulator acceleration
+        run: sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+      - name: Exercise keyboard in Android 10 emulator
+        uses: reactivecircus/android-emulator-runner@4c44018e59b437e86cdfc41da381398f93ed8808
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: gradle connectedDebugAndroidTest
+      - name: Retain emulator results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-10-device-results
+          path: app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn
   preview:
     if: github.event_name == 'push' && github.ref == 'refs/heads/development/keyboard'
     needs: debug
