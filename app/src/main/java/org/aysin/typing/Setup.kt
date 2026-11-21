@@ -18,8 +18,9 @@ class Setup : Activity() {
         })
         panel.addView(Button(this).apply {
             text = "২ · কিবোর্ড বাছুন / Select"
-            setOnClickListener { getSystemService(InputMethodManager::class.java).showInputMethodPicker() }
+            setOnClickListener { getSystemService(InputMethodManager::class.java)?.showInputMethodPicker() }
         })
+        panel.addView(Button(this).apply { text = "Writing Studio · বাংলা ভয়েস"; setOnClickListener { startActivity(Intent(this@Setup, WritingStudio::class.java)) } })
         panel.addView(EditText(this).apply { hint = "এখানে লিখুন · Try typing here" })
         setContentView(panel)
     }
