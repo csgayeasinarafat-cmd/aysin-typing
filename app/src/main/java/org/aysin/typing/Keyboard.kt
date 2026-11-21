@@ -3,7 +3,7 @@ package org.aysin.typing
 import android.graphics.Color
 import android.inputmethodservice.InputMethodService
 import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputConnection
+import android.text.InputType
 import android.widget.*
 
 class Keyboard : InputMethodService() {
@@ -11,6 +11,24 @@ class Keyboard : InputMethodService() {
     private var shifted = false
     private var symbols = false
     private var page = 0
+    private var phonetic = false
+    private var roman = ""
+    private var privateField = false
+    private fun finishWord() {
+        currentInputConnection?.finishComposingText()
+        roman = ""
+    }
+    private fun typeKey(value: String) {
+        val ic = currentInputConnection ?: return
+        if (phonetic && !privateField && !symbols && value.length == 1 && value[0].isLetter()) {
+            roman += value
+            ic.setComposingText(Phonetic.convert(roman),1)
+        } else { finishWord(); ic.commitText(value,1) }
+    }
+    override fun onUpdateSelection(oldSelStart: Int, oldSelEnd: Int, newSelStart: Int, newSelEnd: Int, candidatesStart: Int, candidatesEnd: Int) {
+        super.onUpdateSelection(oldSelStart,oldSelEnd,newSelStart,newSelEnd,candidatesStart,candidatesEnd)
+        if (roman.isNotEmpty() && (candidatesEnd < 0 || newSelStart != candidatesEnd || newSelEnd != candidatesEnd)) finishWord()
+    }
     private val bengali = listOf(
         listOf("অআইঈউঊঋএঐওঔ", "কখগঘঙচছজঝঞ", "টঠডঢণতথদধন", "পফবভমযরলশষস", "হড়ঢ়য়ৎংঃঁ্"),
         listOf("ািীুূৃেৈোৌ", "০১২৩৪৫৬৭৮৯", "।,!?-ঃঁ্")
@@ -18,6 +36,19 @@ class Keyboard : InputMethodService() {
     override fun onStartInput(attribute: EditorInfo?, restarting: Boolean) {
         super.onStartInput(attribute, restarting)
         shifted = false
+        roman = ""
+        val type = attribute?.inputType ?: 0
+        val variation = type and InputType.TYPE_MASK_VARIATION
+        privateField = when (type and InputType.TYPE_MASK_CLASS) {
+            InputType.TYPE_CLASS_NUMBER -> variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            InputType.TYPE_CLASS_TEXT -> variation in setOf(InputType.TYPE_TEXT_VARIATION_PASSWORD,InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)
+            else -> false
+        }
+        if (privateField) { phonetic = false; bangla = false }
+    }
+    override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
+        super.onStartInputView(info,restarting)
+        setInputView(layout())
     }
     override fun onCreateInputView() = layout()
     private fun layout(): LinearLayout {
@@ -47,22 +78,32 @@ class Keyboard : InputMethodService() {
             val line = row()
             for (letter in lettersInRow) {
                 val value = if (shifted && !bangla) letter.uppercase() else letter.toString()
-                key(line,value) { currentInputConnection?.commitText(value,1) }
+                key(line,value) { typeKey(value) }
+            }
+        }
+        if (!privateField) {
+            val modes = row()
+            key(modes,if (phonetic) "✓ Phonetic · ami → আমি" else "Phonetic · ami → আমি") {
+                finishWord(); phonetic = !phonetic; bangla = false; symbols = false; setInputView(layout())
             }
         }
         val controls = row()
         fun redraw() = setInputView(layout())
-        key(controls,if (bangla) "EN" else "বাংলা") { bangla = !bangla; symbols = false; redraw() }
+        key(controls,if (bangla) "EN" else "বাংলা") { finishWord(); phonetic = false; bangla = !bangla; symbols = false; redraw() }
         key(controls,if (bangla) "কার" else "⇧") { if (bangla) page = 1-page else shifted = !shifted; redraw() }
-        key(controls,"123") { symbols = !symbols; redraw() }
-        key(controls,"Space",2f) { currentInputConnection?.commitText(" ",1) }
+        key(controls,"123") { finishWord(); symbols = !symbols; redraw() }
+        key(controls,"Space",2f) { typeKey(" ") }
         key(controls,"⌫") {
             currentInputConnection?.let { ic ->
-                if (!ic.getSelectedText(0).isNullOrEmpty()) ic.commitText("",1)
+                if (roman.isNotEmpty()) {
+                    roman = roman.dropLast(1)
+                    ic.setComposingText(Phonetic.convert(roman),1)
+                    if (roman.isEmpty()) ic.finishComposingText()
+                } else if (!ic.getSelectedText(0).isNullOrEmpty()) ic.commitText("",1)
                 else ic.deleteSurroundingTextInCodePoints(1,0)
             }
         }
-        key(controls,"↵") { if (!sendDefaultEditorAction(true)) currentInputConnection?.commitText("\n",1) }
+        key(controls,"↵") { finishWord(); if (!sendDefaultEditorAction(true)) currentInputConnection?.commitText("\n",1) }
         return panel
     }
 }
