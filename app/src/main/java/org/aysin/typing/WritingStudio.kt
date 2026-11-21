@@ -8,6 +8,8 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
 import android.speech.RecognizerIntent
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import android.widget.*
 import org.json.JSONObject
 import java.net.URL
@@ -16,6 +18,8 @@ import java.util.concurrent.Executors
 
 /** Processes only the editable draft the user explicitly approves. */
 class WritingStudio : Activity() {
+    private var speaker: TextToSpeech? = null
+    private var voiceReady = false
     private lateinit var draft: EditText
     private lateinit var result: EditText
     private lateinit var endpoint: EditText
@@ -27,6 +31,7 @@ class WritingStudio : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         title = "Writing Studio"
+        speaker = TextToSpeech(this) { code -> voiceReady = code == TextToSpeech.SUCCESS }
         val panel = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24,40,24,24) }
         setContentView(ScrollView(this).apply { addView(panel) })
         fun action(label: String, click: () -> Unit) = Button(this).also {
@@ -70,6 +75,9 @@ class WritingStudio : Activity() {
                 }
             }
         }
+        action("Read draft aloud · বাংলা") { readAloud(draft.text.toString(),"bn") }
+        action("Read result aloud · English") { readAloud(result.text.toString(),"en") }
+        action("Stop reading") { speaker?.stop() }
         action("Copy result") {
             if (result.text.isNotBlank()) {
                 getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("AySin result",result.text.toString()))
@@ -82,6 +90,21 @@ class WritingStudio : Activity() {
         if (request == 1 && code == RESULT_OK) {
             val words = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
             if (!words.isNullOrBlank()) { if (draft.length() > 0) draft.append(" "); draft.append(words) }
+        }
+    }
+    private fun readAloud(text: String, language: String) {
+        if (text.isBlank()) { status.text = "Enter text first."; return }
+        val engine = speaker
+        if (!voiceReady || engine == null) { status.text = "Speech playback engine unavailable."; return }
+        val voice = engine.voices.orEmpty().firstOrNull {
+            it.locale.language == language && !it.isNetworkConnectionRequired &&
+                !it.features.orEmpty().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)
+        }
+        if (voice == null) { status.text = "Install an offline voice for " + Locale(language).displayLanguage; return }
+        if (text.length > TextToSpeech.getMaxSpeechInputLength()) { status.text = "Select a shorter paragraph."; return }
+        if (engine.setVoice(voice) == TextToSpeech.ERROR ||
+            engine.speak(text,TextToSpeech.QUEUE_FLUSH,null,"preview") == TextToSpeech.ERROR) {
+            status.text = "Playback unavailable."
         }
     }
     private fun confirmRewrite() {
@@ -140,5 +163,5 @@ class WritingStudio : Activity() {
         state.putString("draft",draft.text.toString())
         state.putString("result",result.text.toString())
     }
-    override fun onDestroy() { worker.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { worker.shutdownNow(); speaker?.stop(); speaker?.shutdown(); super.onDestroy() }
 }
