@@ -1,0 +1,45 @@
+name: Android
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  debug:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - run: sdkmanager "platforms;android-35" "build-tools;34.0.0"
+      - run: gradle --stacktrace testDebugUnitTest lintDebug assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AySin-Typing-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Inspect packaged application and signature
+        run: |
+          "$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | tee package.txt
+          "$ANDROID_HOME/build-tools/34.0.0/apksigner" verify --verbose app/build/outputs/apk/debug/app-debug.apk
+          grep "package: name='org.aysin.typing'" package.txt
+  preview:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/development/keyboard'
+    needs: debug
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: AySin-Typing-debug
+      - name: Publish downloadable development APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mv app-debug.apk AySin-Typing-debug.apk
+          sha256sum AySin-Typing-debug.apk > SHA256SUMS.txt
+          gh release create "preview-${GITHUB_RUN_NUMBER}" AySin-Typing-debug.apk SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "AySin Typing · Development build ${GITHUB_RUN_NUMBER}" --notes "Debug-signed evaluation APK. Enable the keyboard in Android input settings. Physical Huawei Y8p verification is pending. The build runner creates a temporary debug signing key, so updating between previews may require uninstalling the earlier preview."
